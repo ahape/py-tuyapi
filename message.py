@@ -90,22 +90,20 @@ def create_socket(is_post=False):
     """
 
 def send_socket(sock, data, is_post=False):
-  arr = bytearray(len(data) + 24)
+  data_len = len(data)
+  arr = bytearray(data_len + 24)
   # Begin frame
-  arr[0] = 0x00
-  arr[1] = 0x00
-  arr[2] = 0x55
-  arr[3] = 0xAA
+  arr[:3] = [0x00, 0x00, 0x55, 0xAA]
   # Sequence N
   arr[4 + 3] = 0x01
   # Command byte
   arr[8 + 3] = 0x0A if not is_post else 0x07
   # Payload length
-  arr[12 + 3] = len(data) + 8
+  arr[12 + 3] = data_len + 8
   # Payload
   arr[16:-8] = data
   # Calc CRC
-  crc_i = len(data) + 16
+  crc_i = data_len + 16
   calc_crc = crc_32(arr[:crc_i]) & 0xFFFFFFFF
 
   if not is_post:
@@ -117,10 +115,7 @@ def send_socket(sock, data, is_post=False):
   arr[crc_i + 2] = (calc_crc >> (4 * 2)) & 0xff
   arr[crc_i + 3] = (calc_crc >> (4 * 0)) & 0xff
   # End frame
-  arr[len(data) + 20] = 0x00
-  arr[len(data) + 21] = 0x00
-  arr[len(data) + 22] = 0xAA
-  arr[len(data) + 23] = 0x55
+  arr[data_len + 20:data_len + 23] = [0x00, 0x00, 0xAA, 0x55]
 
   to_assert = str(list(arr)).replace(" ", "")
   if not is_post:
@@ -197,7 +192,6 @@ def parse_packet(data):
 
   decd = decrypt(payload)
   payload = json.loads(decd)
-
 
 def encrypt(data, is_post):
   key = base64.b64decode(B64_KEY)
