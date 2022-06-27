@@ -4,6 +4,7 @@ import time
 import socket
 import json
 from Crypto.Cipher import AES
+from Crypto.Hash import MD5
 from Crypto.Util.Padding import pad, unpad
 import base64
 import hashlib
@@ -26,6 +27,13 @@ bytearray([0x6c ,0x1e, 0xc8, 0xe2, 0xbb, 0x9b ,0xb5, 0x9a, 0xb5, 0x0b, 0x0d, 0xa
 encrypted GET:
 xap7CuPc/SAeOjdjlCk8Xo3T5ouakCTpCBUOKVDVHPCz6T5l4QzOgnOwZylKwSy3tda3kfU0JGVv8ATwCRKOUHstdvn06wiLnLCYL5P5NTwQvTt8P9zykyI7i3/TBz7ZzxhNVEUGgxlDUTM/lu38VCf8p/WSCmcGKARbqd0cBAw=
 
+
+
+encrypted SET payload
+My4zAAAAAAAAAAAAAAAAozBSM7tiaZrk2vYNih0j3LXWt5H1NCRlb/AE8AkSjlAotEFx/w1tgK6j/3VsAMkjtda3kfU0JGVv8ATwCRKOUILzi4hTcgCOUKiEojtyhvn6+PDmSUzk7UJtsjdvoDZ0Y+C6uMlLcj1vtuIJtu433D8uONrw2x9WLUSb1rDSmqEbkg7lLTGqG7TxhQHnY/Ob
+
+My4zxap7CuPc/SAeOjdjlCk8Xo3T5ouakCTpCBUOKVDVHPCz6T5l4QzOgnOwZylKwSy3tda3kfU0JGVv8ATwCRKOUHstdvn06wiLnLCYL5P5NTwWFneDnAlkL5yZy07+NxTmLGNdZf1xO4rYU1tpIhdv/k35N80FcXDmSIcig3smN9+ehymQc/rZkBbfcfmscN3z
+
 """
 
 
@@ -44,27 +52,45 @@ ENC_PAYLOAD_B64 = "xap7CuPc/SAeOjdjlCk8Xo3T5ouakCTpCBUOKVDVHPCz6T5l4QzOgnOwZylKw
 GET_PAYLOAD_FRAME = "[0,0,85,170,0,0,0,1,0,0,0,10,0,0,0,136,197,170,123,10,227,220,253,32,30,58,55,99,148,41,60,94,141,211,230,139,154,144,36,233,8,21,14,41,80,213,28,240,179,233,62,101,225,12,206,130,115,176,103,41,74,193,44,183,181,214,183,145,245,52,36,101,111,240,4,240,9,18,142,80,123,45,118,249,244,235,8,139,156,176,152,47,147,249,53,60,16,189,59,124,63,220,242,147,34,59,139,127,211,7,62,217,207,24,77,84,69,6,131,25,67,81,51,63,150,237,252,84,39,252,167,245,146,10,103,6,40,4,91,169,221,28,4,12,62,82,187,66,0,0,170,85]"
 GET_CRC = 1045609282
 
-def create_socket():
+def create_socket(is_post=False):
   with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    json_payload = {
-      "gwId": LIV_RM_3_DEV_ID,
-      "devId": LIV_RM_3_DEV_ID,
-      "t": SAMPLE_TS,
-      "dps": {}, # { "20": True, "21": "colour" },
-      "uid": LIV_RM_3_DEV_ID,
-    }
+    if not is_post:
+      json_payload = {
+        "gwId": LIV_RM_3_DEV_ID,
+        "devId": LIV_RM_3_DEV_ID,
+        "t": SAMPLE_TS,
+        "dps": {}, # { "20": True, "21": "colour" },
+        "uid": LIV_RM_3_DEV_ID,
+      }
+    else:
+      json_payload = {
+        "gwId": LIV_RM_3_DEV_ID,
+        "devId": LIV_RM_3_DEV_ID,
+        "t": SAMPLE_TS,
+        "dps": { "20": True, "21": "colour", "24": "000003e803e8" },
+        #"dps": { "20": True, "21": "colour", "24": "00f003e80032" },
+        #"dps": { "20": True, "21": "colour", "24": "003c03e803e8" },
+        "uid": "",
+      }
 
-    msg = encode(json_payload)
+    msg = encode(json_payload, is_post)
+
+    if is_post:
+      msg2 = bytearray(len(msg) + 15)
+      msg2[15:] = msg
+      msg2[0:15] = "3.3".encode("utf-8")
+      msg = msg2
+      print(base64.b64encode(msg).decode("utf-8"))
 
     s.connect((LIV_RM_3, PORT))
 
-    send_socket(s, msg)
+    send_socket(s, msg, is_post)
 
     data = s.recv(BLOCK_SIZE)
 
     parse_packet(data)
 
-def send_socket(sock, data):
+def send_socket(sock, data, is_post=False):
   arr = bytearray(len(data) + 24)
   # Begin frame
   arr[0] = 0x00
@@ -74,7 +100,7 @@ def send_socket(sock, data):
   # Sequence N
   arr[4 + 3] = 0x01
   # Command byte
-  arr[8 + 3] = 0x0A
+  arr[8 + 3] = 0x0A if not is_post else 0x07
   # Payload length
   arr[12 + 3] = len(data) + 8
   # Payload
@@ -83,7 +109,8 @@ def send_socket(sock, data):
   crc_i = len(data) + 16
   calc_crc = crc_32(arr[:crc_i]) & 0xFFFFFFFF
 
-  assert(calc_crc == GET_CRC)
+  if not is_post:
+    assert(calc_crc == GET_CRC)
 
   # Write out CRC signature
   arr[crc_i + 0] = (calc_crc >> (4 * 6)) & 0xff
@@ -97,7 +124,8 @@ def send_socket(sock, data):
   arr[len(data) + 23] = 0x55
 
   to_assert = str([x for x in arr]).replace(" ", "")
-  assert(GET_PAYLOAD_FRAME == to_assert)
+  if not is_post:
+    assert(GET_PAYLOAD_FRAME == to_assert)
 
   sock.sendall(arr)
 
@@ -108,21 +136,24 @@ def receive_socket(sock):
   #return b"".join(chunk)
 
 
-def encode(json_dict):
+def encode(json_dict, is_post=False):
   data = json.dumps(json_dict).replace(" ", "")
 
   # Payloads are identical
-  assert(data == EX_GET_PAYLOAD)
+  if not is_post:
+    assert(data == EX_GET_PAYLOAD)
 
   b64data = base64.b64encode(data.encode("utf-8")).decode("utf-8")
 
   # Payload bytes are the same
-  assert(b64data == B64_PAYLOAD)
+  if not is_post:
+    assert(b64data == B64_PAYLOAD)
 
-  enc = encrypt(data)
+  enc = encrypt(data, is_post)
   enc_b64 = base64.b64encode(enc).decode("utf-8")
 
-  assert(enc_b64 == ENC_PAYLOAD_B64)
+  if not is_post:
+    assert(enc_b64 == ENC_PAYLOAD_B64)
 
   return enc
 
@@ -165,16 +196,22 @@ def parse_packet(data):
   if expected != computed:
     raise Exception(f"CRCs don't match. Expected: {expected}, computed: {computed}")
 
-  payload = json.loads(decrypt(payload))
+  decd = decrypt(payload)
+  payload = json.loads(decd)
 
-  print(payload)
 
-
-def encrypt(data):
+def encrypt(data, is_post):
   key = base64.b64decode(B64_KEY)
   cipher = AES.new(key, AES.MODE_ECB)
   encrypted = cipher.encrypt(pad(data.encode("utf-8"), AES.block_size))
   return encrypted
+
+def md5(data):
+  h = MD5.new()
+  h.update(data)
+  x = h.hexdigest()
+  return x[8:24]
+
 
 def decrypt(data):
   #data = data[15:]
@@ -271,6 +308,4 @@ def bytes_to_int32(byte_arr):
   return res
 
 
-create_socket()
-
-
+create_socket(True)
