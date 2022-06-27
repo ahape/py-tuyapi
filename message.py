@@ -1,13 +1,10 @@
 #!/usr/bin/python3
-from datetime import datetime
-import time
-import socket
-import json
-from Crypto.Cipher import AES
-from Crypto.Hash import MD5
-from Crypto.Util.Padding import pad, unpad
 import base64
-import hashlib
+import json
+import socket
+#import time
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad, unpad
 
 """
 KEY = str(hashlib.md5(b"yGAdlopoPVldABfn")).encode("utf8")
@@ -82,13 +79,15 @@ def create_socket(is_post=False):
       msg = msg2
       print(base64.b64encode(msg).decode("utf-8"))
 
-    s.connect((LIV_RM_3, PORT))
+    #s.connect((LIV_RM_3, PORT))
 
-    send_socket(s, msg, is_post)
+    send_socket(None, msg, is_post)
 
+    """
     data = s.recv(BLOCK_SIZE)
 
     parse_packet(data)
+    """
 
 def send_socket(sock, data, is_post=False):
   arr = bytearray(len(data) + 24)
@@ -123,11 +122,11 @@ def send_socket(sock, data, is_post=False):
   arr[len(data) + 22] = 0xAA
   arr[len(data) + 23] = 0x55
 
-  to_assert = str([x for x in arr]).replace(" ", "")
+  to_assert = str(list(arr)).replace(" ", "")
   if not is_post:
     assert(GET_PAYLOAD_FRAME == to_assert)
 
-  sock.sendall(arr)
+  #sock.sendall(arr)
 
 def receive_socket(sock):
   chunk = sock.recv(BLOCK_SIZE)
@@ -161,26 +160,26 @@ def parse_packet(data):
   if len(data) < 24:
     raise Exception(f"Packet too short: {len(data)}")
 
-  prefix = bytes_to_int32(data[:4])
+  prefix = int.from_bytes(data[:4], "big")
 
   if prefix != 0x000055AA:
     raise Exception(f"Prefix not 0x000055AA: {prefix:02x}")
 
-  suffix = bytes_to_int32(data[-4:])
+  suffix = int.from_bytes(data[-4:], "big")
 
   if suffix != 0x0000AA55:
     raise Exception(f"Suffix not 0x0000AA55: {suffix}")
 
-  seq = bytes_to_int32(data[4:8])
+  seq = int.from_bytes(data[4:8], "big")
 
-  cmd = bytes_to_int32(data[8:12])
+  cmd = int.from_bytes(data[8:12], "big")
 
-  size = bytes_to_int32(data[12:16])
+  size = int.from_bytes(data[12:16], "big")
 
   if len(data) - 8 < size:
     raise Exception(f"Payload missing: {size}")
 
-  ret_code = bytes_to_int32(data[16:20])
+  ret_code = int.from_bytes(data[16:20], "big")
 
   HEADER_SIZE = 16
 
@@ -190,7 +189,7 @@ def parse_packet(data):
     payload = data[HEADER_SIZE + 4: HEADER_SIZE + size - 8]
 
   crc_start = HEADER_SIZE + size - 8
-  expected = bytes_to_int32(data[crc_start:crc_start + 4])
+  expected = int.from_bytes(data[crc_start:crc_start + 4], "big")
   computed = crc_32(data[:size + 8])
 
   if expected != computed:
@@ -205,13 +204,6 @@ def encrypt(data, is_post):
   cipher = AES.new(key, AES.MODE_ECB)
   encrypted = cipher.encrypt(pad(data.encode("utf-8"), AES.block_size))
   return encrypted
-
-def md5(data):
-  h = MD5.new()
-  h.update(data)
-  x = h.hexdigest()
-  return x[8:24]
-
 
 def decrypt(data):
   #data = data[15:]
@@ -296,16 +288,4 @@ def crc_32(byte_arr):
 
   return crc ^ max_32
 
-def bytes_to_int32(byte_arr):
-  power = 0
-  res = 0
-  arr = list(byte_arr[:])
-  arr.reverse()
-  for b in arr:
-    res += pow(2, power) * b
-    power += 8
-
-  return res
-
-
-create_socket(True)
+create_socket()
