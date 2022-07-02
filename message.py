@@ -26,10 +26,11 @@ xap7CuPc/SAeOjdjlCk8Xo3T5ouakCTpCBUOKVDVHPCz6T5l4QzOgnOwZylKwSy3tda3kfU0JGVv8ATw
 
 
 
-encrypted SET payload
-My4zAAAAAAAAAAAAAAAAozBSM7tiaZrk2vYNih0j3LXWt5H1NCRlb/AE8AkSjlAotEFx/w1tgK6j/3VsAMkjtda3kfU0JGVv8ATwCRKOUILzi4hTcgCOUKiEojtyhvn6+PDmSUzk7UJtsjdvoDZ0Y+C6uMlLcj1vtuIJtu433D8uONrw2x9WLUSb1rDSmqEbkg7lLTGqG7TxhQHnY/Ob
+SET data before encryption
+eyJkZXZJZCI6ImViZTA4MjhlZWRiNjRhYWNjMHd4dmYiLCJnd0lkIjoiZWJlMDgyOGVlZGI2NGFhY2Mwd3h2ZiIsInVpZCI6IiIsInQiOjE2NTYyODIwMDEsImRwcyI6eyIyMCI6dHJ1ZSwiMjEiOiJjb2xvdXIiLCIyNCI6IjAwM2MwM2U4MDNlOCJ9fQ==
 
-My4zxap7CuPc/SAeOjdjlCk8Xo3T5ouakCTpCBUOKVDVHPCz6T5l4QzOgnOwZylKwSy3tda3kfU0JGVv8ATwCRKOUHstdvn06wiLnLCYL5P5NTwWFneDnAlkL5yZy07+NxTmLGNdZf1xO4rYU1tpIhdv/k35N80FcXDmSIcig3smN9+ehymQc/rZkBbfcfmscN3z
+SET data after encryption
+ozBSM7tiaZrk2vYNih0j3LXWt5H1NCRlb/AE8AkSjlAotEFx/w1tgK6j/3VsAMkjtda3kfU0JGVv8ATwCRKOUILzi4hTcgCOUKiEojtyhvn6+PDmSUzk7UJtsjdvoDZ0Y+C6uMlLcj1vtuIJtu433D8uONrw2x9WLUSb1rDSmqEbkg7lLTGqG7TxhQHnY/Ob
 
 """
 
@@ -45,13 +46,26 @@ B64_KEY = "MzIxNjZhMmQ3Yzg4MDI4Yg=="
 EX_GET_PAYLOAD = '{"gwId":"ebe0828eedb64aacc0wxvf","devId":"ebe0828eedb64aacc0wxvf","t":1656282001,"dps":{},"uid":"ebe0828eedb64aacc0wxvf"}'
 EX_SET_PAYLOAD = '{"devId":"ebe0828eedb64aacc0wxvf","gwId":"ebe0828eedb64aacc0wxvf","uid":"","t":1656282001,"dps":{"20":true,"21":"colour"}}'
 B64_PAYLOAD = "eyJnd0lkIjoiZWJlMDgyOGVlZGI2NGFhY2Mwd3h2ZiIsImRldklkIjoiZWJlMDgyOGVlZGI2NGFhY2Mwd3h2ZiIsInQiOjE2NTYyODIwMDEsImRwcyI6e30sInVpZCI6ImViZTA4MjhlZWRiNjRhYWNjMHd4dmYifQ=="
+B64_SET_PAYLOAD = "eyJkZXZJZCI6ImViZTA4MjhlZWRiNjRhYWNjMHd4dmYiLCJnd0lkIjoiZWJlMDgyOGVlZGI2NGFhY2Mwd3h2ZiIsInVpZCI6IiIsInQiOjE2NTYyODIwMDEsImRwcyI6eyIyMCI6dHJ1ZSwiMjEiOiJjb2xvdXIiLCIyNCI6IjAwM2MwM2U4MDNlOCJ9fQ=="
+ENC_NOVER_SET_PAYLOAD = "ozBSM7tiaZrk2vYNih0j3LXWt5H1NCRlb/AE8AkSjlAotEFx/w1tgK6j/3VsAMkjtda3kfU0JGVv8ATwCRKOUILzi4hTcgCOUKiEojtyhvn6+PDmSUzk7UJtsjdvoDZ0Y+C6uMlLcj1vtuIJtu433D8uONrw2x9WLUSb1rDSmqEbkg7lLTGqG7TxhQHnY/Ob"
+ENC_SET_PAYLOAD = "My4zAAAAAAAAAAAAAAAAozBSM7tiaZrk2vYNih0j3LXWt5H1NCRlb/AE8AkSjlAotEFx/w1tgK6j/3VsAMkjtda3kfU0JGVv8ATwCRKOUILzi4hTcgCOUKiEojtyhvn6+PDmSUzk7UJtsjdvoDZ0Y+C6uMlLcj1vtuIJtu433D8uONrw2x9WLUSb1rDSmqEbkg7lLTGqG7TxhQHnY/Ob"
 ENC_PAYLOAD_B64 = "xap7CuPc/SAeOjdjlCk8Xo3T5ouakCTpCBUOKVDVHPCz6T5l4QzOgnOwZylKwSy3tda3kfU0JGVv8ATwCRKOUHstdvn06wiLnLCYL5P5NTwQvTt8P9zykyI7i3/TBz7ZzxhNVEUGgxlDUTM/lu38VCf8p/WSCmcGKARbqd0cBAw="
 GET_PAYLOAD_FRAME = "[0,0,85,170,0,0,0,1,0,0,0,10,0,0,0,136,197,170,123,10,227,220,253,32,30,58,55,99,148,41,60,94,141,211,230,139,154,144,36,233,8,21,14,41,80,213,28,240,179,233,62,101,225,12,206,130,115,176,103,41,74,193,44,183,181,214,183,145,245,52,36,101,111,240,4,240,9,18,142,80,123,45,118,249,244,235,8,139,156,176,152,47,147,249,53,60,16,189,59,124,63,220,242,147,34,59,139,127,211,7,62,217,207,24,77,84,69,6,131,25,67,81,51,63,150,237,252,84,39,252,167,245,146,10,103,6,40,4,91,169,221,28,4,12,62,82,187,66,0,0,170,85]"
 GET_CRC = 1045609282
 
 def create_socket(is_post=False):
   with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    if not is_post:
+    if is_post:
+      json_payload = {
+        "devId": LIV_RM_3_DEV_ID,
+        "gwId": LIV_RM_3_DEV_ID,
+        "uid": "",
+        "t": SAMPLE_TS,
+        "dps": { "20": True, "21": "colour", "24": "003c03e803e8" },
+        #"dps": { "20": True, "21": "colour", "24": "00f003e80032" },
+        #"dps": { "20": True, "21": "colour", "24": "003c03e803e8" },
+      }
+    else:
       json_payload = {
         "gwId": LIV_RM_3_DEV_ID,
         "devId": LIV_RM_3_DEV_ID,
@@ -59,25 +73,8 @@ def create_socket(is_post=False):
         "dps": {}, # { "20": True, "21": "colour" },
         "uid": LIV_RM_3_DEV_ID,
       }
-    else:
-      json_payload = {
-        "gwId": LIV_RM_3_DEV_ID,
-        "devId": LIV_RM_3_DEV_ID,
-        "t": SAMPLE_TS,
-        "dps": { "20": True, "21": "colour", "24": "000003e803e8" },
-        #"dps": { "20": True, "21": "colour", "24": "00f003e80032" },
-        #"dps": { "20": True, "21": "colour", "24": "003c03e803e8" },
-        "uid": "",
-      }
 
     msg = encode(json_payload, is_post)
-
-    if is_post:
-      msg2 = bytearray(len(msg) + 15)
-      msg2[15:] = msg
-      msg2[0:15] = "3.3".encode("utf-8")
-      msg = msg2
-      print(base64.b64encode(msg).decode("utf-8"))
 
     s.connect((LIV_RM_3, PORT))
 
@@ -85,7 +82,7 @@ def create_socket(is_post=False):
 
     data = s.recv(BLOCK_SIZE)
 
-    parse_packet(data)
+    parse_packet(data, is_post)
 
 def send_socket(sock, data, is_post=False):
   data_len = len(data)
@@ -137,18 +134,32 @@ def encode(json_dict, is_post=False):
   b64data = base64.b64encode(data.encode("utf-8")).decode("utf-8")
 
   # Payload bytes are the same
-  if not is_post:
+  if is_post:
+    assert(b64data == B64_SET_PAYLOAD)
+  else:
     assert(b64data == B64_PAYLOAD)
 
   enc = encrypt(data, is_post)
   enc_b64 = base64.b64encode(enc).decode("utf-8")
 
-  if not is_post:
+  if is_post:
+    assert(enc_b64 == ENC_NOVER_SET_PAYLOAD)
+  else:
     assert(enc_b64 == ENC_PAYLOAD_B64)
+
+  if is_post:
+    tmp = bytearray(len(enc) + 15)
+    tmp[15:] = enc
+    prefix = b"3.3"
+    tmp[0:len(prefix)] = prefix
+    enc = tmp
+
+    enc_b64 = base64.b64encode(enc).decode("utf-8")
+    assert(ENC_SET_PAYLOAD == enc_b64)
 
   return enc
 
-def parse_packet(data):
+def parse_packet(data, is_post=False):
   if len(data) < 24:
     raise Exception(f"Packet too short: {len(data)}")
 
@@ -187,7 +198,7 @@ def parse_packet(data):
   if expected != computed:
     raise Exception(f"CRCs don't match. Expected: {expected}, computed: {computed}")
 
-  decd = decrypt(payload)
+  decd = decrypt(payload, is_post)
   payload = json.loads(decd)
 
 def encrypt(data, is_post):
@@ -196,8 +207,9 @@ def encrypt(data, is_post):
   encrypted = cipher.encrypt(pad(data.encode("utf-8"), AES.block_size))
   return encrypted
 
-def decrypt(data):
-  #data = data[15:]
+def decrypt(data, is_post=False):
+  if is_post:
+    data = data[15:]
   key = base64.b64decode(B64_KEY)
   cipher = AES.new(key, AES.MODE_ECB)
   decrypted = unpad(cipher.decrypt(data), AES.block_size)
@@ -279,4 +291,4 @@ def crc_32(byte_arr):
 
   return crc ^ max_32
 
-create_socket()
+create_socket(True)
