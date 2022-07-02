@@ -5,86 +5,41 @@ import socket
 #import time
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
+import test_data
+import sys
 
-"""
-KEY = str(hashlib.md5(b"yGAdlopoPVldABfn")).encode("utf8")
-xap7CuPc/SAeOjdjlCk8Xo3T5ouakCTpCBUOKVDVHPCz6T5l4QzOgnOwZylKwSy3tda3kfU0JGVv8ATwCRKOUMnzevuhNVb6bj55MJKgQy1Ss/5Io9yPW1kxWcvAa6LJ+bfjNNWAmvLtJTOdEsovwyHtP0Bgf91Rr+Pq+dEMMcw=
+SOCKET_PORT = 6668
+SOCKET_BLOCK_SIZE = 1024 # Should be large enough for our small messages
+MESSAGE_HEADER_SIZE = 16
+CIPHER_KEY_B64 = "MzIxNjZhMmQ3Yzg4MDI4Yg=="
 
-bytearray([0x6c ,0x1e, 0xc8, 0xe2, 0xbb, 0x9b ,0xb5, 0x9a, 0xb5, 0x0b, 0x0d, 0xaf, 0x64, 0x9b, 0x41, 0x0a])
+is_test = sys.argv[1] == "test"
+is_post = True
 
-
-{
-  gwId: 'ebe0828eedb64aacc0wxvf',
-  devId: 'ebe0828eedb64aacc0wxvf',
-  t: '1656281006',
-  dps: {},
-  uid: 'ebe0828eedb64aacc0wxvf'
-}
-
-encrypted GET:
-xap7CuPc/SAeOjdjlCk8Xo3T5ouakCTpCBUOKVDVHPCz6T5l4QzOgnOwZylKwSy3tda3kfU0JGVv8ATwCRKOUHstdvn06wiLnLCYL5P5NTwQvTt8P9zykyI7i3/TBz7ZzxhNVEUGgxlDUTM/lu38VCf8p/WSCmcGKARbqd0cBAw=
-
-
-
-SET data before encryption
-eyJkZXZJZCI6ImViZTA4MjhlZWRiNjRhYWNjMHd4dmYiLCJnd0lkIjoiZWJlMDgyOGVlZGI2NGFhY2Mwd3h2ZiIsInVpZCI6IiIsInQiOjE2NTYyODIwMDEsImRwcyI6eyIyMCI6dHJ1ZSwiMjEiOiJjb2xvdXIiLCIyNCI6IjAwM2MwM2U4MDNlOCJ9fQ==
-
-SET data after encryption
-ozBSM7tiaZrk2vYNih0j3LXWt5H1NCRlb/AE8AkSjlAotEFx/w1tgK6j/3VsAMkjtda3kfU0JGVv8ATwCRKOUILzi4hTcgCOUKiEojtyhvn6+PDmSUzk7UJtsjdvoDZ0Y+C6uMlLcj1vtuIJtu433D8uONrw2x9WLUSb1rDSmqEbkg7lLTGqG7TxhQHnY/Ob
-
-"""
-
-
-
-LIV_RM_3 = "192.168.1.137"
-LIV_RM_3_DEV_ID = "ebe0828eedb64aacc0wxvf"
-PORT = 6668
-SAMPLE_TS = 1656282001 # int(time.time())
-BLOCK_SIZE = 2**10
-B64_KEY = "MzIxNjZhMmQ3Yzg4MDI4Yg=="
-
-EX_GET_PAYLOAD = '{"gwId":"ebe0828eedb64aacc0wxvf","devId":"ebe0828eedb64aacc0wxvf","t":1656282001,"dps":{},"uid":"ebe0828eedb64aacc0wxvf"}'
-EX_SET_PAYLOAD = '{"devId":"ebe0828eedb64aacc0wxvf","gwId":"ebe0828eedb64aacc0wxvf","uid":"","t":1656282001,"dps":{"20":true,"21":"colour"}}'
-B64_PAYLOAD = "eyJnd0lkIjoiZWJlMDgyOGVlZGI2NGFhY2Mwd3h2ZiIsImRldklkIjoiZWJlMDgyOGVlZGI2NGFhY2Mwd3h2ZiIsInQiOjE2NTYyODIwMDEsImRwcyI6e30sInVpZCI6ImViZTA4MjhlZWRiNjRhYWNjMHd4dmYifQ=="
-B64_SET_PAYLOAD = "eyJkZXZJZCI6ImViZTA4MjhlZWRiNjRhYWNjMHd4dmYiLCJnd0lkIjoiZWJlMDgyOGVlZGI2NGFhY2Mwd3h2ZiIsInVpZCI6IiIsInQiOjE2NTYyODIwMDEsImRwcyI6eyIyMCI6dHJ1ZSwiMjEiOiJjb2xvdXIiLCIyNCI6IjAwM2MwM2U4MDNlOCJ9fQ=="
-ENC_NOVER_SET_PAYLOAD = "ozBSM7tiaZrk2vYNih0j3LXWt5H1NCRlb/AE8AkSjlAotEFx/w1tgK6j/3VsAMkjtda3kfU0JGVv8ATwCRKOUILzi4hTcgCOUKiEojtyhvn6+PDmSUzk7UJtsjdvoDZ0Y+C6uMlLcj1vtuIJtu433D8uONrw2x9WLUSb1rDSmqEbkg7lLTGqG7TxhQHnY/Ob"
-ENC_SET_PAYLOAD = "My4zAAAAAAAAAAAAAAAAozBSM7tiaZrk2vYNih0j3LXWt5H1NCRlb/AE8AkSjlAotEFx/w1tgK6j/3VsAMkjtda3kfU0JGVv8ATwCRKOUILzi4hTcgCOUKiEojtyhvn6+PDmSUzk7UJtsjdvoDZ0Y+C6uMlLcj1vtuIJtu433D8uONrw2x9WLUSb1rDSmqEbkg7lLTGqG7TxhQHnY/Ob"
-ENC_PAYLOAD_B64 = "xap7CuPc/SAeOjdjlCk8Xo3T5ouakCTpCBUOKVDVHPCz6T5l4QzOgnOwZylKwSy3tda3kfU0JGVv8ATwCRKOUHstdvn06wiLnLCYL5P5NTwQvTt8P9zykyI7i3/TBz7ZzxhNVEUGgxlDUTM/lu38VCf8p/WSCmcGKARbqd0cBAw="
-GET_PAYLOAD_FRAME = "[0,0,85,170,0,0,0,1,0,0,0,10,0,0,0,136,197,170,123,10,227,220,253,32,30,58,55,99,148,41,60,94,141,211,230,139,154,144,36,233,8,21,14,41,80,213,28,240,179,233,62,101,225,12,206,130,115,176,103,41,74,193,44,183,181,214,183,145,245,52,36,101,111,240,4,240,9,18,142,80,123,45,118,249,244,235,8,139,156,176,152,47,147,249,53,60,16,189,59,124,63,220,242,147,34,59,139,127,211,7,62,217,207,24,77,84,69,6,131,25,67,81,51,63,150,237,252,84,39,252,167,245,146,10,103,6,40,4,91,169,221,28,4,12,62,82,187,66,0,0,170,85]"
-GET_CRC = 1045609282
-
-def create_socket(is_post=False):
+def send_request():
   with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    if is_post:
-      json_payload = {
-        "devId": LIV_RM_3_DEV_ID,
-        "gwId": LIV_RM_3_DEV_ID,
-        "uid": "",
-        "t": SAMPLE_TS,
-        "dps": { "20": True, "21": "colour", "24": "003c03e803e8" },
-        #"dps": { "20": True, "21": "colour", "24": "00f003e80032" },
-        #"dps": { "20": True, "21": "colour", "24": "003c03e803e8" },
-      }
+    if is_test:
+      if is_post:
+        json_payload = test_data.SET_PAYLOAD
+      else:
+        json_payload = test_data.GET_PAYLOAD
     else:
-      json_payload = {
-        "gwId": LIV_RM_3_DEV_ID,
-        "devId": LIV_RM_3_DEV_ID,
-        "t": SAMPLE_TS,
-        "dps": {}, # { "20": True, "21": "colour" },
-        "uid": LIV_RM_3_DEV_ID,
-      }
+      json_payload = {}
 
-    msg = encode(json_payload, is_post)
+    msg = encode(json_payload)
 
-    s.connect((LIV_RM_3, PORT))
+    s.connect((test_data.LIV_RM_3_IP, SOCKET_PORT))
 
-    send_socket(s, msg, is_post)
+    msg = create_socket_message(msg)
 
-    data = s.recv(BLOCK_SIZE)
+    s.sendall(msg)
 
-    parse_packet(data, is_post)
+    data = s.recv(SOCKET_BLOCK_SIZE)
 
-def send_socket(sock, data, is_post=False):
+    parse_packet(data)
+
+
+def create_socket_message(data):
   data_len = len(data)
   arr = bytearray(data_len + 24)
   # Begin frame
@@ -101,8 +56,8 @@ def send_socket(sock, data, is_post=False):
   crc_i = data_len + 16
   calc_crc = crc_32(arr[:crc_i]) & 0xFFFFFFFF
 
-  if not is_post:
-    assert(calc_crc == GET_CRC)
+  if is_test and not is_post:
+    assert(calc_crc == test_data.GET_CRC)
 
   # Write out CRC signature
   arr[crc_i + 0] = (calc_crc >> (4 * 6)) & 0xff
@@ -112,40 +67,34 @@ def send_socket(sock, data, is_post=False):
   # End frame
   arr[data_len + 20:] = [0x00, 0x00, 0xAA, 0x55]
 
-  to_assert = str(list(arr)).replace(" ", "")
-  if not is_post:
-    assert(GET_PAYLOAD_FRAME == to_assert)
+  if is_test and not is_post:
+    assert(test_data.GET_PAYLOAD_FRAME == str(list(arr)).replace(" ", ""))
 
-  sock.sendall(arr)
+  return arr
 
 def receive_socket(sock):
-  chunk = sock.recv(BLOCK_SIZE)
+  chunk = sock.recv(SOCKET_BLOCK_SIZE)
 
   return b"".join(chunk)
 
-
-def encode(json_dict, is_post=False):
+def encode(json_dict):
   data = json.dumps(json_dict).replace(" ", "")
 
-  # Payloads are identical
-  if not is_post:
-    assert(data == EX_GET_PAYLOAD)
-
-  b64data = base64.b64encode(data.encode("utf-8")).decode("utf-8")
-
   # Payload bytes are the same
-  if is_post:
-    assert(b64data == B64_SET_PAYLOAD)
-  else:
-    assert(b64data == B64_PAYLOAD)
+  if is_test:
+    if is_post:
+      assert(test_data.SET_PAYLOAD_B64 == get_b64(data.encode("utf-8")))
+    else:
+      assert(test_data.GET_PAYLOAD_B64 == get_b64(data.encode("utf-8")))
 
-  enc = encrypt(data, is_post)
+  enc = encrypt(data)
   enc_b64 = base64.b64encode(enc).decode("utf-8")
 
-  if is_post:
-    assert(enc_b64 == ENC_NOVER_SET_PAYLOAD)
-  else:
-    assert(enc_b64 == ENC_PAYLOAD_B64)
+  if is_test:
+    if is_post:
+      assert(test_data.ENC_SET_PAYLOAD_NO_VERSION_HEADER_B64 == get_b64(enc))
+    else:
+      assert(test_data.ENC_GET_PAYLOAD_B64 == get_b64(enc))
 
   if is_post:
     tmp = bytearray(len(enc) + 15)
@@ -154,12 +103,12 @@ def encode(json_dict, is_post=False):
     tmp[0:len(prefix)] = prefix
     enc = tmp
 
-    enc_b64 = base64.b64encode(enc).decode("utf-8")
-    assert(ENC_SET_PAYLOAD == enc_b64)
+    if is_test:
+      assert(test_data.ENC_SET_PAYLOAD_B64 == get_b64(enc))
 
   return enc
 
-def parse_packet(data, is_post=False):
+def parse_packet(data):
   if len(data) < 24:
     raise Exception(f"Packet too short: {len(data)}")
 
@@ -184,34 +133,30 @@ def parse_packet(data, is_post=False):
 
   ret_code = int.from_bytes(data[16:20], "big")
 
-  HEADER_SIZE = 16
-
   if ret_code & 0xFFFFFF00:
-    payload = data[HEADER_SIZE: HEADER_SIZE + size - 8]
+    payload = data[MESSAGE_HEADER_SIZE: MESSAGE_HEADER_SIZE + size - 8]
   else:
-    payload = data[HEADER_SIZE + 4: HEADER_SIZE + size - 8]
+    payload = data[MESSAGE_HEADER_SIZE + 4: MESSAGE_HEADER_SIZE + size - 8]
 
-  crc_start = HEADER_SIZE + size - 8
+  crc_start = MESSAGE_HEADER_SIZE + size - 8
   expected = int.from_bytes(data[crc_start:crc_start + 4], "big")
   computed = crc_32(data[:size + 8])
 
   if expected != computed:
     raise Exception(f"CRCs don't match. Expected: {expected}, computed: {computed}")
 
-  decd = decrypt(payload, is_post)
+  decd = decrypt(payload)
   payload = json.loads(decd)
 
-def encrypt(data, is_post):
-  key = base64.b64decode(B64_KEY)
-  cipher = AES.new(key, AES.MODE_ECB)
+def encrypt(data):
+  cipher = AES.new(base64.b64decode(CIPHER_KEY_B64), AES.MODE_ECB)
   encrypted = cipher.encrypt(pad(data.encode("utf-8"), AES.block_size))
   return encrypted
 
-def decrypt(data, is_post=False):
+def decrypt(data):
   if is_post:
     data = data[15:]
-  key = base64.b64decode(B64_KEY)
-  cipher = AES.new(key, AES.MODE_ECB)
+  cipher = AES.new(base64.b64decode(CIPHER_KEY_B64), AES.MODE_ECB)
   decrypted = unpad(cipher.decrypt(data), AES.block_size)
   return decrypted
 
@@ -291,4 +236,15 @@ def crc_32(byte_arr):
 
   return crc ^ max_32
 
-create_socket(True)
+def get_b64(data):
+  return base64.b64encode(data).decode("utf-8")
+
+if is_test:
+  # Test GET
+  is_post = False
+  send_request()
+
+  # Test SET
+  is_post = True
+  send_request()
+
