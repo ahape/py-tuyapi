@@ -79,15 +79,13 @@ def create_socket(is_post=False):
       msg = msg2
       print(base64.b64encode(msg).decode("utf-8"))
 
-    #s.connect((LIV_RM_3, PORT))
+    s.connect((LIV_RM_3, PORT))
 
-    send_socket(None, msg, is_post)
+    send_socket(s, msg, is_post)
 
-    """
     data = s.recv(BLOCK_SIZE)
 
     parse_packet(data)
-    """
 
 def send_socket(sock, data, is_post=False):
   data_len = len(data)
@@ -115,19 +113,18 @@ def send_socket(sock, data, is_post=False):
   arr[crc_i + 2] = (calc_crc >> (4 * 2)) & 0xff
   arr[crc_i + 3] = (calc_crc >> (4 * 0)) & 0xff
   # End frame
-  arr[data_len + 20:data_len + 23] = [0x00, 0x00, 0xAA, 0x55]
+  arr[data_len + 20:] = [0x00, 0x00, 0xAA, 0x55]
 
   to_assert = str(list(arr)).replace(" ", "")
   if not is_post:
     assert(GET_PAYLOAD_FRAME == to_assert)
 
-  #sock.sendall(arr)
+  sock.sendall(arr)
 
 def receive_socket(sock):
   chunk = sock.recv(BLOCK_SIZE)
 
-  print(chunk)
-  #return b"".join(chunk)
+  return b"".join(chunk)
 
 
 def encode(json_dict, is_post=False):
