@@ -16,6 +16,7 @@ CIPHER_KEY_B64 = "MzIxNjZhMmQ3Yzg4MDI4Yg=="
 is_test = sys.argv[1] == "test"
 is_post = True
 
+
 def send_request():
   with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     if is_test:
@@ -57,7 +58,7 @@ def create_socket_message(data):
   calc_crc = crc_32(arr[:crc_i]) & 0xFFFFFFFF
 
   if is_test and not is_post:
-    assert(calc_crc == test_data.GET_CRC)
+    assert calc_crc == test_data.GET_CRC
 
   # Write out CRC signature
   arr[crc_i + 0] = (calc_crc >> (4 * 6)) & 0xff
@@ -68,14 +69,16 @@ def create_socket_message(data):
   arr[data_len + 20:] = [0x00, 0x00, 0xAA, 0x55]
 
   if is_test and not is_post:
-    assert(test_data.GET_PAYLOAD_FRAME == str(list(arr)).replace(" ", ""))
+    assert test_data.GET_PAYLOAD_FRAME == str(list(arr)).replace(" ", "")
 
   return arr
+
 
 def receive_socket(sock):
   chunk = sock.recv(SOCKET_BLOCK_SIZE)
 
   return b"".join(chunk)
+
 
 def encode(json_dict):
   data = json.dumps(json_dict).replace(" ", "")
@@ -83,18 +86,18 @@ def encode(json_dict):
   # Payload bytes are the same
   if is_test:
     if is_post:
-      assert(test_data.SET_PAYLOAD_B64 == get_b64(data.encode("utf-8")))
+      assert test_data.SET_PAYLOAD_B64 == get_b64(data.encode("utf-8"))
     else:
-      assert(test_data.GET_PAYLOAD_B64 == get_b64(data.encode("utf-8")))
+      assert test_data.GET_PAYLOAD_B64 == get_b64(data.encode("utf-8"))
 
   enc = encrypt(data)
   enc_b64 = base64.b64encode(enc).decode("utf-8")
 
   if is_test:
     if is_post:
-      assert(test_data.ENC_SET_PAYLOAD_NO_VERSION_HEADER_B64 == get_b64(enc))
+      assert test_data.ENC_SET_PAYLOAD_NO_VERSION_HEADER_B64 == get_b64(enc)
     else:
-      assert(test_data.ENC_GET_PAYLOAD_B64 == get_b64(enc))
+      assert test_data.ENC_GET_PAYLOAD_B64 == get_b64(enc)
 
   if is_post:
     tmp = bytearray(len(enc) + 15)
@@ -104,9 +107,10 @@ def encode(json_dict):
     enc = tmp
 
     if is_test:
-      assert(test_data.ENC_SET_PAYLOAD_B64 == get_b64(enc))
+      assert test_data.ENC_SET_PAYLOAD_B64 == get_b64(enc)
 
   return enc
+
 
 def parse_packet(data):
   if len(data) < 24:
@@ -148,10 +152,12 @@ def parse_packet(data):
   decd = decrypt(payload)
   payload = json.loads(decd)
 
+
 def encrypt(data):
   cipher = AES.new(base64.b64decode(CIPHER_KEY_B64), AES.MODE_ECB)
   encrypted = cipher.encrypt(pad(data.encode("utf-8"), AES.block_size))
   return encrypted
+
 
 def decrypt(data):
   if is_post:
@@ -159,6 +165,7 @@ def decrypt(data):
   cipher = AES.new(base64.b64decode(CIPHER_KEY_B64), AES.MODE_ECB)
   decrypted = unpad(cipher.decrypt(data), AES.block_size)
   return decrypted
+
 
 crc_32_table = [
   0x00000000, 0x77073096, 0xEE0E612C, 0x990951BA,
@@ -227,6 +234,7 @@ crc_32_table = [
   0xB40BBE37, 0xC30C8EA1, 0x5A05DF1B, 0x2D02EF8D,
 ]
 
+
 def crc_32(byte_arr):
   max_32 = 0xFFFFFFFF
   crc = max_32
@@ -236,8 +244,10 @@ def crc_32(byte_arr):
 
   return crc ^ max_32
 
+
 def get_b64(data):
   return base64.b64encode(data).decode("utf-8")
+
 
 if is_test:
   # Test GET
@@ -247,4 +257,3 @@ if is_test:
   # Test SET
   is_post = True
   send_request()
-
