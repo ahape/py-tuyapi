@@ -1,0 +1,65 @@
+[
+  {
+    "name": "Bdrm1",
+    "id": "eba49869119aff5cd17jwi",
+    "key": "a58de88851ee4828",
+    "deviceType": "tuya",
+    "ip": "192.168.1.113"
+  },
+  { 
+    "name": "Bdrm2",
+    "id": "eb6f7b68cf87dc3612q828",
+    "key": "92a8c45697cca9a2",
+    "deviceType": "tuya",
+    "ip": "192.168.1.139"
+  },
+  {
+    "name": "Entry2",
+    "id": "eb73b0f6741c4fbf1dzung",
+    "key": "1f18aaea249f1bf0",
+    "deviceType": "tuya",
+    "ip": "192.168.1.143"
+  },
+  {
+    "name": "LivRm3",
+    "id": "ebe0828eedb64aacc0wxvf",
+    "key": "32166a2d7c88028b",
+    "deviceType": "tuya",
+    "ip": "192.168.1.137"
+  },
+  {
+    "name": "LivRm2",
+    "id": "eb2180c294f27ea7d1m5vd",
+    "key": "a15ab8d3de72c2b6",
+    "deviceType": "tuya",
+    "ip": "192.168.1.140"
+  },
+  {
+    "name": "LivRm1",
+    "id": "eb6b84b71fa4d0e0d9vyct",
+    "key": "6dc5c8809c6869b0",
+    "deviceType": "tuya",
+    "ip": "192.168.1.101"
+  },
+  {
+    "name": "Entry1",
+    "id": "eb5c3969157923de329om2",
+    "key": "e565ad62d7382b98",
+    "deviceType": "tuya",
+    "ip": "192.168.1.102"
+  },
+  {
+    "name": "LivRm4",
+    "id": "eb7fa18897e7d98ecdicyf",
+    "key": "4c76437a064b42fc",
+    "deviceType": "tuya",
+    "ip": "192.168.1.103"
+  },
+  {
+    "name": "Lightstrip",
+    "id": "192.168.1.136",
+    "key": "/api/YL9GA2Odkxl790m1gZLrXXkRQfw0BjNZMFEiaTIN/lights/3/state",
+    "deviceType": "hue",
+    "ip": "192.168.1.136"
+  }
+]
