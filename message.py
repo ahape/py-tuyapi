@@ -100,9 +100,19 @@ def encrypt_json_payload(json_dict, key):
 def decrypt_json_payload(data, key):
   if is_post:
     data = data[15:]
+
   cipher = AES.new(key, AES.MODE_ECB)
-  decrypted = unpad(cipher.decrypt(data), AES.block_size)
-  return json.loads(decrypted)
+
+  try:
+    decrypted = unpad(cipher.decrypt(data), AES.block_size)
+  except:
+    print("ERROR: Unable to connect to device")
+    return
+
+  try:
+    return json.loads(decrypted)
+  except:
+    print("ERROR: Couldn't parse as JSON", decrypted)
 
 def create_socket_message(data):
   data_len = len(data)
