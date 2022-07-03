@@ -7,18 +7,17 @@ from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 import test_data
 import sys
+import os
 
 SOCKET_PORT = 6668
 SOCKET_BLOCK_SIZE = 1024 # Should be large enough for our small messages
 MESSAGE_HEADER_SIZE = 16
 
-if len(sys.argv) > 1:
+DEBUG = os.getenv("DEBUG") == "true"
+
+if __name__ == "__main__" and len(sys.argv) > 1:
   arg = sys.argv[1]
-  is_test = arg == "test"
   color_index = int(arg) if arg.isdigit() else 0
-else:
-  is_test = False
-  color_index = 0
 
 is_post = True
 
@@ -60,7 +59,7 @@ def get_request_data_for_device(dev):
 
 def send_request(dev=None):
   with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    if is_test:
+    if DEBUG:
       if is_post:
         json_payload = test_data.SET_PAYLOAD
       else:
@@ -68,10 +67,10 @@ def send_request(dev=None):
     else:
       json_payload = get_request_data_for_device(dev)
 
-    key = dev["key"].encode("utf-8") if not is_test else test_data.LIV_RM_3_KEY.encode("utf-8")
+    key = dev["key"].encode("utf-8") if not DEBUG else test_data.LIV_RM_3_KEY.encode("utf-8")
     msg = encode(json_payload, key)
 
-    if is_test:
+    if DEBUG:
       s.connect((test_data.LIV_RM_3_IP, SOCKET_PORT))
     else:
       print(f"Connecting to {dev['name']} ({dev['ip']}) ...")
@@ -85,7 +84,7 @@ def send_request(dev=None):
 
     parsed = parse_packet(data, key)
 
-    if not is_test:
+    if not DEBUG:
       print(f"Received data from {dev['name']}", parsed)
 
 
@@ -106,7 +105,7 @@ def create_socket_message(data):
   crc_i = data_len + 16
   calc_crc = crc_32(arr[:crc_i]) & 0xFFFFFFFF
 
-  if is_test and not is_post:
+  if DEBUG and not is_post:
     assert calc_crc == test_data.GET_CRC
 
   # Write out CRC signature
@@ -117,7 +116,7 @@ def create_socket_message(data):
   # End frame
   arr[data_len + 20:] = [0x00, 0x00, 0xAA, 0x55]
 
-  if is_test and not is_post:
+  if DEBUG and not is_post:
     assert test_data.GET_PAYLOAD_FRAME == str(list(arr)).replace(" ", "")
 
   return arr
@@ -133,7 +132,7 @@ def encode(json_dict, key):
   data = json.dumps(json_dict).replace(" ", "")
 
   # Payload bytes are the same
-  if is_test:
+  if DEBUG:
     if is_post:
       assert test_data.SET_PAYLOAD_B64 == get_b64(data.encode("utf-8"))
     else:
@@ -142,7 +141,7 @@ def encode(json_dict, key):
   enc = encrypt(data, key)
   enc_b64 = base64.b64encode(enc).decode("utf-8")
 
-  if is_test:
+  if DEBUG:
     if is_post:
       assert test_data.ENC_SET_PAYLOAD_NO_VERSION_HEADER_B64 == get_b64(enc)
     else:
@@ -155,7 +154,7 @@ def encode(json_dict, key):
     tmp[0:len(prefix)] = prefix
     enc = tmp
 
-    if is_test:
+    if DEBUG:
       assert test_data.ENC_SET_PAYLOAD_B64 == get_b64(enc)
 
   return enc
@@ -297,7 +296,7 @@ def get_b64(data):
   return base64.b64encode(data).decode("utf-8")
 
 
-if is_test:
+if DEBUG:
   # Test GET
   is_post = False
   send_request()

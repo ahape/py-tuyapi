@@ -1,21 +1,20 @@
 LIV_RM_3_IP = "192.168.1.137"
 LIV_RM_3_DEV_ID = "ebe0828eedb64aacc0wxvf"
 LIV_RM_3_KEY = "32166a2d7c88028b"
+EXAMPLE_TS = 1656282001
 
 SET_PAYLOAD = {
   "devId": LIV_RM_3_DEV_ID,
   "gwId": LIV_RM_3_DEV_ID,
   "uid": "",
-  "t": 1656282001,
-  "dps": { "20": True, "21": "colour", "24": "003c03e803e8" }, # yellow
-  #"dps": { "20": True, "21": "colour", "24": "00f003e80032" }, # blue?
-  #"dps": { "20": True, "21": "colour", "24": "003c03e803e8" }, # red?
+  "t": EXAMPLE_TS,
+  "dps": { "20": True, "21": "colour", "24": "003c03e803e8" },
 }
 
 GET_PAYLOAD = {
   "gwId": LIV_RM_3_DEV_ID,
   "devId": LIV_RM_3_DEV_ID,
-  "t": 1656282001,
+  "t": EXAMPLE_TS,
   "dps": {},
   "uid": LIV_RM_3_DEV_ID,
 }
