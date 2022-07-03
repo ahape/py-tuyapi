@@ -15,27 +15,36 @@ MESSAGE_HEADER_SIZE = 16
 
 DEBUG = os.getenv("DEBUG") == "true"
 
-if __name__ == "__main__" and len(sys.argv) > 1:
-  arg = sys.argv[1]
-  color_index = int(arg) if arg.isdigit() else 0
-
 is_post = True
 
-colors = [
-  "000003e803e8", # red
-  "00f003e80032", # blue
-  "003c03e803e8", # yellow
-]
+def send_device_request(dev=None):
+  # TODO: Pass in options that determine what sort of payload to create
+  # Create payload
+  if DEBUG:
+    key = test_data.LIV_RM_3_KEY.encode("utf-8")
+    payload = test_data.SET_PAYLOAD if is_post else test_data.GET_PAYLOAD
+    dev = test_data.LIV_RM_3
+  else:
+    key = dev["key"].encode("utf-8")
+    payload = create_json_payload(dev)
 
-def run():
-  with open("devices.json") as f:
-    devs = json.load(f)
+  # Encrypt payload
+  enc_payload = encrypt_json_payload(payload, key)
 
-  for dev in devs:
-    if dev["deviceType"] == "tuya":
-      send_request(dev)
+  # Serialize payload into bytes
+  message = create_socket_message(enc_payload)
 
-def get_request_data_for_device(dev):
+  print(f"Connecting to {dev['name']} ({dev['ip']}) ...")
+
+  # Send message ... synchronously await response
+  enc_response = send_socket_message(message, dev["ip"], key)
+
+  # Decrypt encrypted response
+  response = decrypt_json_payload(enc_response, key)
+
+  print(f"Received data from {dev['name']}", response)
+
+def create_json_payload(dev):
   if is_post:
     return {
       "devId": dev["id"],
@@ -57,36 +66,43 @@ def get_request_data_for_device(dev):
       "dps": {},
     }
 
-def send_request(dev=None):
-  with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    if DEBUG:
-      if is_post:
-        json_payload = test_data.SET_PAYLOAD
-      else:
-        json_payload = test_data.GET_PAYLOAD
+def encrypt_json_payload(json_dict, key):
+  # Compress our JSON string as small as we can
+  data = json.dumps(json_dict).replace(" ", "")
+
+  if DEBUG:
+    if is_post:
+      assert test_data.SET_PAYLOAD_B64 == get_b64(data.encode("utf-8"))
     else:
-      json_payload = get_request_data_for_device(dev)
+      assert test_data.GET_PAYLOAD_B64 == get_b64(data.encode("utf-8"))
 
-    key = dev["key"].encode("utf-8") if not DEBUG else test_data.LIV_RM_3_KEY.encode("utf-8")
-    msg = encode(json_payload, key)
+  cipher = AES.new(key, AES.MODE_ECB)
+  enc = cipher.encrypt(pad(data.encode("utf-8"), AES.block_size))
+
+  if DEBUG:
+    if is_post:
+      assert test_data.ENC_SET_PAYLOAD_NO_VERSION_HEADER_B64 == get_b64(enc)
+    else:
+      assert test_data.ENC_GET_PAYLOAD_B64 == get_b64(enc)
+
+  if is_post:
+    tmp = bytearray(len(enc) + 15)
+    tmp[15:] = enc
+    prefix = b"3.3"
+    tmp[0:len(prefix)] = prefix
+    enc = tmp
 
     if DEBUG:
-      s.connect((test_data.LIV_RM_3_IP, SOCKET_PORT))
-    else:
-      print(f"Connecting to {dev['name']} ({dev['ip']}) ...")
-      s.connect((dev["ip"], SOCKET_PORT))
+      assert test_data.ENC_SET_PAYLOAD_B64 == get_b64(enc)
 
-    msg = create_socket_message(msg)
+  return enc
 
-    s.sendall(msg)
-
-    data = s.recv(SOCKET_BLOCK_SIZE)
-
-    parsed = parse_packet(data, key)
-
-    if not DEBUG:
-      print(f"Received data from {dev['name']}", parsed)
-
+def decrypt_json_payload(data, key):
+  if is_post:
+    data = data[15:]
+  cipher = AES.new(key, AES.MODE_ECB)
+  decrypted = unpad(cipher.decrypt(data), AES.block_size)
+  return json.loads(decrypted)
 
 def create_socket_message(data):
   data_len = len(data)
@@ -121,46 +137,20 @@ def create_socket_message(data):
 
   return arr
 
-
-def receive_socket(sock):
-  chunk = sock.recv(SOCKET_BLOCK_SIZE)
-
-  return b"".join(chunk)
-
-
-def encode(json_dict, key):
-  data = json.dumps(json_dict).replace(" ", "")
-
-  # Payload bytes are the same
-  if DEBUG:
-    if is_post:
-      assert test_data.SET_PAYLOAD_B64 == get_b64(data.encode("utf-8"))
-    else:
-      assert test_data.GET_PAYLOAD_B64 == get_b64(data.encode("utf-8"))
-
-  enc = encrypt(data, key)
-  enc_b64 = base64.b64encode(enc).decode("utf-8")
-
-  if DEBUG:
-    if is_post:
-      assert test_data.ENC_SET_PAYLOAD_NO_VERSION_HEADER_B64 == get_b64(enc)
-    else:
-      assert test_data.ENC_GET_PAYLOAD_B64 == get_b64(enc)
-
-  if is_post:
-    tmp = bytearray(len(enc) + 15)
-    tmp[15:] = enc
-    prefix = b"3.3"
-    tmp[0:len(prefix)] = prefix
-    enc = tmp
-
+def send_socket_message(message, dev_ip, key):
+  with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     if DEBUG:
-      assert test_data.ENC_SET_PAYLOAD_B64 == get_b64(enc)
+      s.connect((test_data.LIV_RM_3_IP, SOCKET_PORT))
+    else:
+      s.connect((dev_ip, SOCKET_PORT))
 
-  return enc
+    s.sendall(message)
 
+    response = s.recv(SOCKET_BLOCK_SIZE)
 
-def parse_packet(data, key):
+  return parse_socket_response(response, key)
+
+def parse_socket_response(data, key):
   if len(data) < 24:
     raise Exception(f"Packet too short: {len(data)}")
 
@@ -197,22 +187,7 @@ def parse_packet(data, key):
   if expected != computed:
     raise Exception(f"CRCs don't match. Expected: {expected}, computed: {computed}")
 
-  return json.loads(decrypt(payload, key))
-
-
-def encrypt(data, key):
-  cipher = AES.new(key, AES.MODE_ECB)
-  encrypted = cipher.encrypt(pad(data.encode("utf-8"), AES.block_size))
-  return encrypted
-
-
-def decrypt(data, key):
-  if is_post:
-    data = data[15:]
-  cipher = AES.new(key, AES.MODE_ECB)
-  decrypted = unpad(cipher.decrypt(data), AES.block_size)
-  return decrypted
-
+  return payload
 
 crc_32_table = [
   0x00000000, 0x77073096, 0xEE0E612C, 0x990951BA,
@@ -291,18 +266,30 @@ def crc_32(byte_arr):
 
   return crc ^ max_32
 
-
 def get_b64(data):
   return base64.b64encode(data).decode("utf-8")
 
+if __name__ == "__main__":
+  if DEBUG:
+    # Test GET
+    is_post = False
+    send_device_request()
 
-if DEBUG:
-  # Test GET
-  is_post = False
-  send_request()
+    # Test SET
+    is_post = True
+    send_device_request()
+  else:
+    # TODO: Move all this to another module
+    colors = [
+      "000003e803e8", # red
+      "00f003e80032", # blue
+      "003c03e803e8", # yellow
+    ]
+    color_index = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 0
 
-  # Test SET
-  is_post = True
-  send_request()
-else:
-  run()
+    with open("devices.json") as f:
+      devs = json.load(f)
+
+    for dev in devs:
+      if dev["deviceType"] == "tuya":
+        send_device_request(dev)
