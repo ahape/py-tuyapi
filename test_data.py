@@ -1,5 +1,6 @@
 LIV_RM_3_IP = "192.168.1.137"
 LIV_RM_3_DEV_ID = "ebe0828eedb64aacc0wxvf"
+LIV_RM_3_KEY = "32166a2d7c88028b"
 
 SET_PAYLOAD = {
   "devId": LIV_RM_3_DEV_ID,

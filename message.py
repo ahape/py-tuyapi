@@ -2,7 +2,7 @@
 import base64
 import json
 import socket
-#import time
+import time
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 import test_data
@@ -11,13 +11,54 @@ import sys
 SOCKET_PORT = 6668
 SOCKET_BLOCK_SIZE = 1024 # Should be large enough for our small messages
 MESSAGE_HEADER_SIZE = 16
-CIPHER_KEY_B64 = "MzIxNjZhMmQ3Yzg4MDI4Yg=="
 
-is_test = sys.argv[1] == "test"
+if len(sys.argv) > 1:
+  arg = sys.argv[1]
+  is_test = arg == "test"
+  color_index = int(arg) if arg.isdigit() else 0
+else:
+  is_test = False
+  color_index = 0
+
 is_post = True
 
+colors = [
+  "000003e803e8", # red
+  "00f003e80032", # blue
+  "003c03e803e8", # yellow
+]
 
-def send_request():
+def run():
+  with open("devices.json") as f:
+    devs = json.load(f)
+
+  for dev in devs:
+    if dev["deviceType"] == "tuya":
+      send_request(dev)
+
+def get_request_data_for_device(dev):
+  if is_post:
+    return {
+      "devId": dev["id"],
+      "gwId": dev["id"],
+      "uid": "",
+      "t": int(time.time()),
+      "dps": {
+        "20": True,
+        "21": "colour",
+        "24": colors[color_index],
+      },
+    }
+  else:
+    return {
+      "devId": dev["id"],
+      "gwId": dev["id"],
+      "uid": dev["id"],
+      "t": int(time.time()),
+      "dps": {},
+    }
+
+def send_request(dev=None):
   with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     if is_test:
       if is_post:
@@ -25,11 +66,16 @@ def send_request():
       else:
         json_payload = test_data.GET_PAYLOAD
     else:
-      json_payload = {}
+      json_payload = get_request_data_for_device(dev)
 
-    msg = encode(json_payload)
+    key = dev["key"].encode("utf-8") if not is_test else test_data.LIV_RM_3_KEY.encode("utf-8")
+    msg = encode(json_payload, key)
 
-    s.connect((test_data.LIV_RM_3_IP, SOCKET_PORT))
+    if is_test:
+      s.connect((test_data.LIV_RM_3_IP, SOCKET_PORT))
+    else:
+      print(f"Connecting to {dev['name']} ({dev['ip']}) ...")
+      s.connect((dev["ip"], SOCKET_PORT))
 
     msg = create_socket_message(msg)
 
@@ -37,7 +83,10 @@ def send_request():
 
     data = s.recv(SOCKET_BLOCK_SIZE)
 
-    parse_packet(data)
+    parsed = parse_packet(data, key)
+
+    if not is_test:
+      print(f"Received data from {dev['name']}", parsed)
 
 
 def create_socket_message(data):
@@ -46,11 +95,11 @@ def create_socket_message(data):
   # Begin frame
   arr[:3] = [0x00, 0x00, 0x55, 0xAA]
   # Sequence N
-  arr[4 + 3] = 0x01
+  arr[7] = 0x01
   # Command byte
-  arr[8 + 3] = 0x0A if not is_post else 0x07
+  arr[11] = 0x07 if is_post else 0x0a
   # Payload length
-  arr[12 + 3] = data_len + 8
+  arr[15] = data_len + 8
   # Payload
   arr[16:-8] = data
   # Calc CRC
@@ -61,10 +110,10 @@ def create_socket_message(data):
     assert calc_crc == test_data.GET_CRC
 
   # Write out CRC signature
-  arr[crc_i + 0] = (calc_crc >> (4 * 6)) & 0xff
-  arr[crc_i + 1] = (calc_crc >> (4 * 4)) & 0xff
-  arr[crc_i + 2] = (calc_crc >> (4 * 2)) & 0xff
-  arr[crc_i + 3] = (calc_crc >> (4 * 0)) & 0xff
+  arr[crc_i + 0] = (calc_crc >> 0x18) & 0xff
+  arr[crc_i + 1] = (calc_crc >> 0x10) & 0xff
+  arr[crc_i + 2] = (calc_crc >> 0x08) & 0xff
+  arr[crc_i + 3] = (calc_crc >> 0x00) & 0xff
   # End frame
   arr[data_len + 20:] = [0x00, 0x00, 0xAA, 0x55]
 
@@ -80,7 +129,7 @@ def receive_socket(sock):
   return b"".join(chunk)
 
 
-def encode(json_dict):
+def encode(json_dict, key):
   data = json.dumps(json_dict).replace(" ", "")
 
   # Payload bytes are the same
@@ -90,7 +139,7 @@ def encode(json_dict):
     else:
       assert test_data.GET_PAYLOAD_B64 == get_b64(data.encode("utf-8"))
 
-  enc = encrypt(data)
+  enc = encrypt(data, key)
   enc_b64 = base64.b64encode(enc).decode("utf-8")
 
   if is_test:
@@ -112,7 +161,7 @@ def encode(json_dict):
   return enc
 
 
-def parse_packet(data):
+def parse_packet(data, key):
   if len(data) < 24:
     raise Exception(f"Packet too short: {len(data)}")
 
@@ -149,20 +198,19 @@ def parse_packet(data):
   if expected != computed:
     raise Exception(f"CRCs don't match. Expected: {expected}, computed: {computed}")
 
-  decd = decrypt(payload)
-  payload = json.loads(decd)
+  return json.loads(decrypt(payload, key))
 
 
-def encrypt(data):
-  cipher = AES.new(base64.b64decode(CIPHER_KEY_B64), AES.MODE_ECB)
+def encrypt(data, key):
+  cipher = AES.new(key, AES.MODE_ECB)
   encrypted = cipher.encrypt(pad(data.encode("utf-8"), AES.block_size))
   return encrypted
 
 
-def decrypt(data):
+def decrypt(data, key):
   if is_post:
     data = data[15:]
-  cipher = AES.new(base64.b64decode(CIPHER_KEY_B64), AES.MODE_ECB)
+  cipher = AES.new(key, AES.MODE_ECB)
   decrypted = unpad(cipher.decrypt(data), AES.block_size)
   return decrypted
 
@@ -257,3 +305,5 @@ if is_test:
   # Test SET
   is_post = True
   send_request()
+else:
+  run()
