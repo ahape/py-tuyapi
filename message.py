@@ -12,7 +12,10 @@ from settings import Settings
 SOCKET_PORT = 6668
 SOCKET_BLOCK_SIZE = 4096
 MESSAGE_HEADER_SIZE = 16
+DATA_HEADER = b'3.3'
 DEBUG = os.getenv("DEBUG") == "true"
+PACKET_PREFIX = 0x000055AA
+PACKET_SUFFIX = 0x0000AA55
 
 packet_id = 1
 
@@ -23,7 +26,7 @@ def send_device_request(dev, commandType, settings=Settings()):
     payload = test_data.SET_PAYLOAD if commandType == CommandType.CONTROL else test_data.GET_PAYLOAD
   else:
     key = dev["key"].encode("utf-8")
-    payload = create_json_payload(dev, commandType, settings)
+    payload = create_json_payload(dev, settings)
 
   # Encrypt payload
   encrypted_payload = encrypt_json_payload(payload, key, commandType)
@@ -43,52 +46,44 @@ def send_device_request(dev, commandType, settings=Settings()):
 
   return responses
 
-def create_json_payload(dev, commandType, settings):
-  data = {
+def create_json_payload(dev, settings):
+  return {
     "devId": dev["id"],
+    "dps": settings.serialize(),
     "t": int(time.time()),
   }
 
-  if commandType == CommandType.CONTROL:
-    data["dps"] = settings.serialize()
-  elif commandType == CommandType.DP_QUERY:
-    data["dps"] = settings.serialize()
-  else:
-    raise Exception(f"Unknown command type: {commandType}")
-
-  return data
-
-def encrypt_json_payload(json_dict, key, commandType):
+def encrypt_json_payload(data, key, commandType):
   # Compress our JSON string as small as we can
-  data = json.dumps(json_dict).replace(" ", "")
+  serialized = json.dumps(data).replace(" ", "")
   is_post = commandType == CommandType.CONTROL
 
   if DEBUG:
     if is_post:
-      assert test_data.SET_PAYLOAD_B64 == get_b64(data.encode("utf-8"))
+      assert test_data.SET_PAYLOAD_B64 == get_b64(serialized.encode("utf-8"))
     else:
-      assert test_data.GET_PAYLOAD_B64 == get_b64(data.encode("utf-8"))
+      assert test_data.GET_PAYLOAD_B64 == get_b64(serialized.encode("utf-8"))
 
   cipher = AES.new(key, AES.MODE_ECB)
-  enc = cipher.encrypt(pad(data.encode("utf-8"), AES.block_size))
+  encrypted = cipher.encrypt(pad(serialized.encode("utf-8"), AES.block_size))
 
   if DEBUG:
     if is_post:
-      assert test_data.ENC_SET_PAYLOAD_NO_VERSION_HEADER_B64 == get_b64(enc)
+      assert test_data.ENC_SET_PAYLOAD_NO_VERSION_HEADER_B64 == get_b64(encrypted)
     else:
-      assert test_data.ENC_GET_PAYLOAD_B64 == get_b64(enc)
+      assert test_data.ENC_GET_PAYLOAD_B64 == get_b64(encrypted)
 
+  # For any message that includes data, we must apply this version header
   if is_post:
-    tmp = bytearray(len(enc) + 15)
-    tmp[15:] = enc
-    prefix = b"3.3"
-    tmp[0:len(prefix)] = prefix
-    enc = tmp
+    tmp = bytearray(len(encrypted) + 15)
+    tmp[15:] = encrypted
+    tmp[0: len(DATA_HEADER)] = DATA_HEADER
+    encrypted = tmp
 
     if DEBUG:
-      assert test_data.ENC_SET_PAYLOAD_B64 == get_b64(enc)
+      assert test_data.ENC_SET_PAYLOAD_B64 == get_b64(encrypted)
 
-  return enc
+  return encrypted
 
 def decrypt_json_payload(data, key, commandType):
   if commandType == CommandType.CONTROL:
@@ -111,34 +106,34 @@ def create_socket_message(data, commandType):
   global packet_id
 
   data_len = len(data)
-  arr = bytearray(data_len + 24)
+  buffer = bytearray(data_len + 24)
   # Begin frame (4 bytes)
-  arr[:3] = int.to_bytes(0x000055AA, 4, "big")
+  buffer[:3] = int.to_bytes(PACKET_PREFIX, 4, "big")
   # Sequence (4 bytes)
-  arr[7] = packet_id
+  buffer[7] = packet_id
   if not DEBUG:
     packet_id += 1
   # Command (4 bytes)
-  arr[11] = commandType
+  buffer[11] = commandType
   # Payload length byte
-  arr[15] = data_len + 8
+  buffer[15] = data_len + 8
   # Payload bytes
-  arr[16:-8] = data
-  # Calc CRC
-  calc_crc = crc_32(arr[:-8]) & 0xFFFFFFFF
+  buffer[16:-8] = data
+  # Calc CRC32
+  calc_crc = crc_32(buffer[:-8]) & 0xFFFFFFFF
 
   if DEBUG and commandType == CommandType.DP_QUERY:
     assert calc_crc == test_data.GET_CRC
 
   # Write out CRC signature
-  arr[-8:-4] = int.to_bytes(calc_crc, 4, "big")
+  buffer[-8:-4] = int.to_bytes(calc_crc, 4, "big")
   # End frame
-  arr[-4:] = int.to_bytes(0x0000AA55, 4, "big")
+  buffer[-4:] = int.to_bytes(PACKET_SUFFIX, 4, "big")
 
   if DEBUG and commandType == CommandType.DP_QUERY:
-    assert test_data.GET_PAYLOAD_FRAME == str(list(arr)).replace(" ", "")
+    assert test_data.GET_PAYLOAD_FRAME == str(list(buffer)).replace(" ", "")
 
-  return arr
+  return buffer
 
 def send_socket_message(message, dev_ip, key):
   with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -156,7 +151,7 @@ def receive_socket_message(sock, key):
   responses = []
 
   while True:
-    response, leftover = parse_socket_response(buffer, key)
+    response, leftover = parse_socket_message(buffer, key)
     responses.append(response)
     if len(leftover):
       buffer = leftover
@@ -164,20 +159,20 @@ def receive_socket_message(sock, key):
 
   return responses
 
-def parse_socket_response(buffer, key):
+def parse_socket_message(buffer, key):
   if len(buffer) < 24:
     raise Exception(f"Packet too short: {len(buffer)}")
 
   prefix = int.from_bytes(buffer[:4], "big")
 
-  if prefix != 0x000055AA:
-    raise Exception(f"Prefix not 0x000055AA: {prefix:02x}")
+  if prefix != PACKET_PREFIX:
+    raise Exception(f"Prefix not {PACKET_PREFIX}: {prefix:02x}")
 
   leftover = []
   while len(buffer):
     last_4_bytes = buffer[-4:]
     suffix = int.from_bytes(last_4_bytes, "big")
-    if suffix != 0x0000AA55:
+    if suffix != PACKET_SUFFIX:
       leftover += last_4_bytes
       buffer = buffer[:-4]
     else: break
@@ -199,15 +194,16 @@ def parse_socket_response(buffer, key):
   return_code = int.from_bytes(buffer[16:20], "big")
   response["return_code"] = return_code
 
+  crc_i = MESSAGE_HEADER_SIZE + size - 8
+
   if return_code & 0xFFFFFF00:
-    encrypted_data = buffer[MESSAGE_HEADER_SIZE: MESSAGE_HEADER_SIZE + size - 8]
+    encrypted_data = buffer[MESSAGE_HEADER_SIZE: crc_i]
   else:
-    encrypted_data = buffer[MESSAGE_HEADER_SIZE + 4: MESSAGE_HEADER_SIZE + size - 8]
+    encrypted_data = buffer[MESSAGE_HEADER_SIZE + 4: crc_i]
 
   response["data"] = encrypted_data
 
-  crc_start = MESSAGE_HEADER_SIZE + size - 8
-  their_crc = int.from_bytes(buffer[crc_start:crc_start + 4], "big")
+  their_crc = int.from_bytes(buffer[crc_i: crc_i + 4], "big")
   our_crc = crc_32(buffer[:size + 8])
 
   if their_crc != our_crc:

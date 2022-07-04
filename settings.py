@@ -11,9 +11,9 @@ class Settings():
 
   def serialize(self):
     ret = {}
-    if self.on != None:
+    if self.on is not None:
       ret["20"] = self.on
-    if self.color != None:
+    if self.color is not None:
       ret["21"] = "colour"
       ret["24"] = to_tuya_color(self.color)
     return ret
