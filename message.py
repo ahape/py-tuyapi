@@ -1,4 +1,3 @@
-#!/usr/bin/python3
 import base64
 import json
 import socket
@@ -6,33 +5,31 @@ import time
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 import test_data
-import sys
 import os
+from command_type import CommandType
 
 SOCKET_PORT = 6668
 SOCKET_BLOCK_SIZE = 4096
 MESSAGE_HEADER_SIZE = 16
-
 DEBUG = os.getenv("DEBUG") == "true"
 
-is_post = True
+packet_id = 1
 
-def send_device_request(dev=None):
+def send_device_request(dev, commandType):
   # TODO: Pass in options that determine what sort of payload to create
   # Create payload
   if DEBUG:
     key = test_data.LIV_RM_3_KEY.encode("utf-8")
-    payload = test_data.SET_PAYLOAD if is_post else test_data.GET_PAYLOAD
-    dev = test_data.LIV_RM_3
+    payload = test_data.SET_PAYLOAD if commandType == CommandType.CONTROL else test_data.GET_PAYLOAD
   else:
     key = dev["key"].encode("utf-8")
-    payload = create_json_payload(dev)
+    payload = create_json_payload(dev, commandType)
 
   # Encrypt payload
-  encrypted_payload = encrypt_json_payload(payload, key)
+  encrypted_payload = encrypt_json_payload(payload, key, commandType)
 
   # Serialize payload into bytes
-  message = create_socket_message(encrypted_payload)
+  message = create_socket_message(encrypted_payload, commandType)
 
   print(f"Connecting to {dev['name']} ({dev['ip']}) ...")
 
@@ -41,11 +38,11 @@ def send_device_request(dev=None):
 
   # Decrypt encrypted response
   for response in encrypted_responses:
-    data = decrypt_json_payload(response, key)
+    data = decrypt_json_payload(response, key, commandType)
     print(f"Received data from {dev['name']}", data)
 
-def create_json_payload(dev):
-  if is_post:
+def create_json_payload(dev, commandType):
+  if commandType == CommandType.CONTROL:
     return {
       "devId": dev["id"],
       "gwId": dev["id"],
@@ -54,10 +51,11 @@ def create_json_payload(dev):
       "dps": {
         "20": True,
         "21": "colour",
-        "24": colors[color_index],
+        "24": "00f003e80032", # hard code blue for now
       },
     }
-  else:
+
+  if commandType == CommandType.DP_QUERY:
     return {
       "devId": dev["id"],
       "gwId": dev["id"],
@@ -66,9 +64,12 @@ def create_json_payload(dev):
       "dps": {},
     }
 
-def encrypt_json_payload(json_dict, key):
+  raise Exception(f"Unknown command type: {commandType}")
+
+def encrypt_json_payload(json_dict, key, commandType):
   # Compress our JSON string as small as we can
   data = json.dumps(json_dict).replace(" ", "")
+  is_post = commandType == CommandType.CONTROL
 
   if DEBUG:
     if is_post:
@@ -97,8 +98,8 @@ def encrypt_json_payload(json_dict, key):
 
   return enc
 
-def decrypt_json_payload(data, key):
-  if is_post:
+def decrypt_json_payload(data, key, commandType):
+  if commandType == CommandType.CONTROL:
     data = data[15:]
 
   cipher = AES.new(key, AES.MODE_ECB)
@@ -114,15 +115,19 @@ def decrypt_json_payload(data, key):
   except:
     print("ERROR: Couldn't parse as JSON", decrypted)
 
-def create_socket_message(data):
+def create_socket_message(data, commandType):
+  global packet_id
+
   data_len = len(data)
   arr = bytearray(data_len + 24)
   # Begin frame (4 bytes)
   arr[:3] = int.to_bytes(0x000055AA, 4, "big")
   # Sequence (4 bytes)
-  arr[7] = 0x01
+  arr[7] = packet_id
+  if not DEBUG:
+    packet_id += 1
   # Command (4 bytes)
-  arr[11] = 0x07 if is_post else 0x0a
+  arr[11] = commandType
   # Payload length byte
   arr[15] = data_len + 8
   # Payload bytes
@@ -130,7 +135,7 @@ def create_socket_message(data):
   # Calc CRC
   calc_crc = crc_32(arr[:-8]) & 0xFFFFFFFF
 
-  if DEBUG and not is_post:
+  if DEBUG and commandType == CommandType.DP_QUERY:
     assert calc_crc == test_data.GET_CRC
 
   # Write out CRC signature
@@ -138,7 +143,7 @@ def create_socket_message(data):
   # End frame
   arr[-4:] = int.to_bytes(0x0000AA55, 4, "big")
 
-  if DEBUG and not is_post:
+  if DEBUG and commandType == CommandType.DP_QUERY:
     assert test_data.GET_PAYLOAD_FRAME == str(list(arr)).replace(" ", "")
 
   return arr
@@ -292,28 +297,3 @@ def crc_32(byte_arr):
 
 def get_b64(data):
   return base64.b64encode(data).decode("utf-8")
-
-if __name__ == "__main__":
-  if DEBUG:
-    # Test GET
-    is_post = False
-    send_device_request()
-
-    # Test SET
-    is_post = True
-    send_device_request()
-  else:
-    # TODO: Move all this to another module
-    colors = [
-      "000003e803e8", # red
-      "00f003e80032", # blue
-      "003c03e803e8", # yellow
-    ]
-    color_index = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 0
-
-    with open("devices.json") as f:
-      devs = json.load(f)
-
-    for dev in devs:
-      if dev["deviceType"] == "tuya":
-        send_device_request(dev)
