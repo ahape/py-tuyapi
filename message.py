@@ -7,6 +7,7 @@ from Crypto.Util.Padding import pad, unpad
 import test_data
 import os
 from command_type import CommandType
+from settings import Settings
 
 SOCKET_PORT = 6668
 SOCKET_BLOCK_SIZE = 4096
@@ -15,8 +16,7 @@ DEBUG = os.getenv("DEBUG") == "true"
 
 packet_id = 1
 
-def send_device_request(dev, commandType, settings):
-  # TODO: Pass in options that determine what sort of payload to create
+def send_device_request(dev, commandType, settings=Settings()):
   # Create payload
   if DEBUG:
     key = test_data.LIV_RM_3_KEY.encode("utf-8")
@@ -41,6 +41,8 @@ def send_device_request(dev, commandType, settings):
     response["data"] = decrypt_json_payload(response["data"], key, commandType)
     print(f"Received data from {dev['name']}", response)
 
+  return responses
+
 def create_json_payload(dev, commandType, settings):
   data = {
     "devId": dev["id"],
@@ -48,9 +50,9 @@ def create_json_payload(dev, commandType, settings):
   }
 
   if commandType == CommandType.CONTROL:
-    data["dps"] = settings.to_dict()
+    data["dps"] = settings.serialize()
   elif commandType == CommandType.DP_QUERY:
-    data["dps"] = settings.to_dict()
+    data["dps"] = settings.serialize()
   else:
     raise Exception(f"Unknown command type: {commandType}")
 
@@ -185,13 +187,7 @@ def parse_socket_response(buffer, key):
 
   response = {}
   response["packet_id"] = int.from_bytes(buffer[4:8], "big")
-
-  commandType = int.from_bytes(buffer[8:12], "big")
-
-  if commandType != CommandType.STATUS:
-    print("Unexpected response command type", commandType)
-
-  response["command_type"] = commandType
+  response["command_type"] = int.from_bytes(buffer[8:12], "big")
 
   size = int.from_bytes(buffer[12:16], "big")
 
@@ -287,7 +283,6 @@ crc_32_table = [
   0xB3667A2E, 0xC4614AB8, 0x5D681B02, 0x2A6F2B94,
   0xB40BBE37, 0xC30C8EA1, 0x5A05DF1B, 0x2D02EF8D,
 ]
-
 
 def crc_32(byte_arr):
   max_32 = 0xFFFFFFFF
