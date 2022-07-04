@@ -34,32 +34,28 @@ def send_device_request(dev, commandType):
   print(f"Connecting to {dev['name']} ({dev['ip']}) ...")
 
   # Send message ... synchronously await response
-  encrypted_responses = send_socket_message(message, dev["ip"], key)
+  responses = send_socket_message(message, dev["ip"], key)
 
   # Decrypt encrypted response
-  for response in encrypted_responses:
-    data = decrypt_json_payload(response, key, commandType)
-    print(f"Received data from {dev['name']}", data)
+  for response in responses:
+    response["data"] = decrypt_json_payload(response["data"], key, commandType)
+    print(f"Received data from {dev['name']}", response)
 
 def create_json_payload(dev, commandType):
   if commandType == CommandType.CONTROL:
     return {
       "devId": dev["id"],
-      "gwId": dev["id"],
-      "uid": "",
       "t": int(time.time()),
       "dps": {
         "20": True,
         "21": "colour",
-        "24": "00f003e80032", # hard code blue for now
+        "24": "003c03e803e8", # hard code blue for now
       },
     }
 
   if commandType == CommandType.DP_QUERY:
     return {
       "devId": dev["id"],
-      "gwId": dev["id"],
-      "uid": dev["id"],
       "t": int(time.time()),
       "dps": {},
     }
@@ -160,63 +156,76 @@ def send_socket_message(message, dev_ip, key):
     return receive_socket_message(sock, key)
 
 def receive_socket_message(sock, key):
-  response = sock.recv(SOCKET_BLOCK_SIZE)
-  packets = []
+  buffer = sock.recv(SOCKET_BLOCK_SIZE)
+  responses = []
 
   while True:
-    packet, leftover = parse_socket_response(response, key)
-    packets.append(packet)
+    response, leftover = parse_socket_response(buffer, key)
+    responses.append(response)
     if len(leftover):
-      response = leftover
+      buffer = leftover
     else: break
 
-  return packets
+  return responses
 
-def parse_socket_response(data, key):
-  if len(data) < 24:
-    raise Exception(f"Packet too short: {len(data)}")
+def parse_socket_response(buffer, key):
+  if len(buffer) < 24:
+    raise Exception(f"Packet too short: {len(buffer)}")
 
-  prefix = int.from_bytes(data[:4], "big")
+  prefix = int.from_bytes(buffer[:4], "big")
 
   if prefix != 0x000055AA:
     raise Exception(f"Prefix not 0x000055AA: {prefix:02x}")
 
   leftover = []
-  while len(data):
-    last_4_bytes = data[-4:]
+  while len(buffer):
+    last_4_bytes = buffer[-4:]
     suffix = int.from_bytes(last_4_bytes, "big")
     if suffix != 0x0000AA55:
       leftover += last_4_bytes
-      data = data[:-4]
+      buffer = buffer[:-4]
     else: break
 
-  if not len(data):
+  if not len(buffer):
     raise Exception(f"Suffix not set correctly")
 
-  seq = int.from_bytes(data[4:8], "big")
+  response = {}
+  response["packet_id"] = int.from_bytes(buffer[4:8], "big")
 
-  cmd = int.from_bytes(data[8:12], "big")
+  commandType = int.from_bytes(buffer[8:12], "big")
 
-  size = int.from_bytes(data[12:16], "big")
+  if commandType != CommandType.STATUS:
+    print("Unexpected response command type", commandType)
 
-  if len(data) - 8 < size:
+  response["command_type"] = commandType
+
+  size = int.from_bytes(buffer[12:16], "big")
+
+  if len(buffer) - 8 < size:
     raise Exception(f"Payload missing: {size}")
 
-  ret_code = int.from_bytes(data[16:20], "big")
+  response["content_length"] = size
 
-  if ret_code & 0xFFFFFF00:
-    payload = data[MESSAGE_HEADER_SIZE: MESSAGE_HEADER_SIZE + size - 8]
+  return_code = int.from_bytes(buffer[16:20], "big")
+  response["return_code"] = return_code
+
+  if return_code & 0xFFFFFF00:
+    encrypted_data = buffer[MESSAGE_HEADER_SIZE: MESSAGE_HEADER_SIZE + size - 8]
   else:
-    payload = data[MESSAGE_HEADER_SIZE + 4: MESSAGE_HEADER_SIZE + size - 8]
+    encrypted_data = buffer[MESSAGE_HEADER_SIZE + 4: MESSAGE_HEADER_SIZE + size - 8]
+
+  response["data"] = encrypted_data
 
   crc_start = MESSAGE_HEADER_SIZE + size - 8
-  expected = int.from_bytes(data[crc_start:crc_start + 4], "big")
-  computed = crc_32(data[:size + 8])
+  their_crc = int.from_bytes(buffer[crc_start:crc_start + 4], "big")
+  our_crc = crc_32(buffer[:size + 8])
 
-  if expected != computed:
-    raise Exception(f"CRCs don't match. Expected: {expected}, computed: {computed}")
+  if their_crc != our_crc:
+    raise Exception(f"CRCs don't match. Expected: {our_crc}, found: {their_crc}")
 
-  return payload, leftover
+  response["crc32"] = our_crc
+
+  return response, leftover
 
 crc_32_table = [
   0x00000000, 0x77073096, 0xEE0E612C, 0x990951BA,

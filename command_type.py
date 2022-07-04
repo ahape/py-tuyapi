@@ -1,5 +1,6 @@
 from enum import IntEnum
 
 class CommandType(IntEnum):
-  DP_QUERY = 10
   CONTROL = 7
+  STATUS = 8
+  DP_QUERY = 10
