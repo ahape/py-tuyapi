@@ -10,7 +10,7 @@ import sys
 import os
 
 SOCKET_PORT = 6668
-SOCKET_BLOCK_SIZE = 1024 # Should be large enough for our small messages
+SOCKET_BLOCK_SIZE = 4096
 MESSAGE_HEADER_SIZE = 16
 
 DEBUG = os.getenv("DEBUG") == "true"
@@ -29,20 +29,20 @@ def send_device_request(dev=None):
     payload = create_json_payload(dev)
 
   # Encrypt payload
-  enc_payload = encrypt_json_payload(payload, key)
+  encrypted_payload = encrypt_json_payload(payload, key)
 
   # Serialize payload into bytes
-  message = create_socket_message(enc_payload)
+  message = create_socket_message(encrypted_payload)
 
   print(f"Connecting to {dev['name']} ({dev['ip']}) ...")
 
   # Send message ... synchronously await response
-  enc_response = send_socket_message(message, dev["ip"], key)
+  encrypted_responses = send_socket_message(message, dev["ip"], key)
 
   # Decrypt encrypted response
-  response = decrypt_json_payload(enc_response, key)
-
-  print(f"Received data from {dev['name']}", response)
+  for response in encrypted_responses:
+    data = decrypt_json_payload(response, key)
+    print(f"Received data from {dev['name']}", data)
 
 def create_json_payload(dev):
   if is_post:
@@ -117,30 +117,26 @@ def decrypt_json_payload(data, key):
 def create_socket_message(data):
   data_len = len(data)
   arr = bytearray(data_len + 24)
-  # Begin frame
-  arr[:3] = [0x00, 0x00, 0x55, 0xAA]
-  # Sequence N
+  # Begin frame (4 bytes)
+  arr[:3] = int.to_bytes(0x000055AA, 4, "big")
+  # Sequence (4 bytes)
   arr[7] = 0x01
-  # Command byte
+  # Command (4 bytes)
   arr[11] = 0x07 if is_post else 0x0a
-  # Payload length
+  # Payload length byte
   arr[15] = data_len + 8
-  # Payload
+  # Payload bytes
   arr[16:-8] = data
   # Calc CRC
-  crc_i = data_len + 16
-  calc_crc = crc_32(arr[:crc_i]) & 0xFFFFFFFF
+  calc_crc = crc_32(arr[:-8]) & 0xFFFFFFFF
 
   if DEBUG and not is_post:
     assert calc_crc == test_data.GET_CRC
 
   # Write out CRC signature
-  arr[crc_i + 0] = (calc_crc >> 0x18) & 0xff
-  arr[crc_i + 1] = (calc_crc >> 0x10) & 0xff
-  arr[crc_i + 2] = (calc_crc >> 0x08) & 0xff
-  arr[crc_i + 3] = (calc_crc >> 0x00) & 0xff
+  arr[-8:-4] = int.to_bytes(calc_crc, 4, "big")
   # End frame
-  arr[data_len + 20:] = [0x00, 0x00, 0xAA, 0x55]
+  arr[-4:] = int.to_bytes(0x0000AA55, 4, "big")
 
   if DEBUG and not is_post:
     assert test_data.GET_PAYLOAD_FRAME == str(list(arr)).replace(" ", "")
@@ -148,17 +144,28 @@ def create_socket_message(data):
   return arr
 
 def send_socket_message(message, dev_ip, key):
-  with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+  with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
     if DEBUG:
-      s.connect((test_data.LIV_RM_3_IP, SOCKET_PORT))
+      sock.connect((test_data.LIV_RM_3_IP, SOCKET_PORT))
     else:
-      s.connect((dev_ip, SOCKET_PORT))
+      sock.connect((dev_ip, SOCKET_PORT))
 
-    s.sendall(message)
+    sock.sendall(message)
 
-    response = s.recv(SOCKET_BLOCK_SIZE)
+    return receive_socket_message(sock, key)
 
-  return parse_socket_response(response, key)
+def receive_socket_message(sock, key):
+  response = sock.recv(SOCKET_BLOCK_SIZE)
+  packets = []
+
+  while True:
+    packet, leftover = parse_socket_response(response, key)
+    packets.append(packet)
+    if len(leftover):
+      response = leftover
+    else: break
+
+  return packets
 
 def parse_socket_response(data, key):
   if len(data) < 24:
@@ -169,10 +176,17 @@ def parse_socket_response(data, key):
   if prefix != 0x000055AA:
     raise Exception(f"Prefix not 0x000055AA: {prefix:02x}")
 
-  suffix = int.from_bytes(data[-4:], "big")
+  leftover = []
+  while len(data):
+    last_4_bytes = data[-4:]
+    suffix = int.from_bytes(last_4_bytes, "big")
+    if suffix != 0x0000AA55:
+      leftover += last_4_bytes
+      data = data[:-4]
+    else: break
 
-  if suffix != 0x0000AA55:
-    raise Exception(f"Suffix not 0x0000AA55: {suffix}")
+  if not len(data):
+    raise Exception(f"Suffix not set correctly")
 
   seq = int.from_bytes(data[4:8], "big")
 
@@ -197,7 +211,7 @@ def parse_socket_response(data, key):
   if expected != computed:
     raise Exception(f"CRCs don't match. Expected: {expected}, computed: {computed}")
 
-  return payload
+  return payload, leftover
 
 crc_32_table = [
   0x00000000, 0x77073096, 0xEE0E612C, 0x990951BA,
