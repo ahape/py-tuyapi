@@ -15,7 +15,7 @@ DEBUG = os.getenv("DEBUG") == "true"
 
 packet_id = 1
 
-def send_device_request(dev, commandType):
+def send_device_request(dev, commandType, settings):
   # TODO: Pass in options that determine what sort of payload to create
   # Create payload
   if DEBUG:
@@ -23,7 +23,7 @@ def send_device_request(dev, commandType):
     payload = test_data.SET_PAYLOAD if commandType == CommandType.CONTROL else test_data.GET_PAYLOAD
   else:
     key = dev["key"].encode("utf-8")
-    payload = create_json_payload(dev, commandType)
+    payload = create_json_payload(dev, commandType, settings)
 
   # Encrypt payload
   encrypted_payload = encrypt_json_payload(payload, key, commandType)
@@ -41,26 +41,20 @@ def send_device_request(dev, commandType):
     response["data"] = decrypt_json_payload(response["data"], key, commandType)
     print(f"Received data from {dev['name']}", response)
 
-def create_json_payload(dev, commandType):
+def create_json_payload(dev, commandType, settings):
+  data = {
+    "devId": dev["id"],
+    "t": int(time.time()),
+  }
+
   if commandType == CommandType.CONTROL:
-    return {
-      "devId": dev["id"],
-      "t": int(time.time()),
-      "dps": {
-        "20": True,
-        "21": "colour",
-        "24": "003c03e803e8", # hard code blue for now
-      },
-    }
+    data["dps"] = settings.to_dict()
+  elif commandType == CommandType.DP_QUERY:
+    data["dps"] = settings.to_dict()
+  else:
+    raise Exception(f"Unknown command type: {commandType}")
 
-  if commandType == CommandType.DP_QUERY:
-    return {
-      "devId": dev["id"],
-      "t": int(time.time()),
-      "dps": {},
-    }
-
-  raise Exception(f"Unknown command type: {commandType}")
+  return data
 
 def encrypt_json_payload(json_dict, key, commandType):
   # Compress our JSON string as small as we can
