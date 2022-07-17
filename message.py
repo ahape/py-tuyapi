@@ -107,17 +107,14 @@ def create_socket_message(data, commandType):
 
   data_len = len(data)
   buffer = bytearray(data_len + 24)
-  # Begin frame (4 bytes)
-  buffer[:3] = int.to_bytes(PACKET_PREFIX, 4, "big")
-  # Sequence (4 bytes)
-  buffer[7] = packet_id
+  # BEGIN HEADER
+  buffer[:3] = int.to_bytes(PACKET_PREFIX, 4, "big") # Prefix
+  buffer[7] = packet_id # Sequence number
   if not DEBUG:
     packet_id += 1
-  # Command (4 bytes)
-  buffer[11] = commandType
-  # Payload length byte
-  buffer[15] = data_len + 8
-  # Payload bytes
+  buffer[11] = commandType # Command
+  buffer[15] = data_len + 8 # Size
+  # END HEADER
   buffer[16:-8] = data
   # Calc CRC32
   calc_crc = crc_32(buffer[:-8]) & 0xFFFFFFFF
@@ -127,7 +124,7 @@ def create_socket_message(data, commandType):
 
   # Write out CRC signature
   buffer[-8:-4] = int.to_bytes(calc_crc, 4, "big")
-  # End frame
+  # End message with suffix
   buffer[-4:] = int.to_bytes(PACKET_SUFFIX, 4, "big")
 
   if DEBUG and commandType == CommandType.DP_QUERY:
